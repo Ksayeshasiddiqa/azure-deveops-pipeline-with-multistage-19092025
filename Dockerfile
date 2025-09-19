@@ -1,39 +1,34 @@
 # ======================
-# 1. Builder Stage
+# 1. Base Stage
 # ======================
-FROM python:3.10-slim AS builder
-
-# Set working directory
+FROM python:3.12-slim AS base
 WORKDIR /app
-
-# Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential gcc \
+    build-essential gcc curl git \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first (to leverage Docker cache)
+# ======================
+# 2. Builder Stage
+# ======================
+FROM base AS builder
 COPY requirements.txt .
-
-# Install dependencies into a folder
 RUN pip install --upgrade pip \
     && pip install --prefix=/install -r requirements.txt
 
-
 # ======================
-# 2. Final Runtime Stage
+# 3. Build Stage
 # ======================
-FROM python:3.10-slim
-
-WORKDIR /app
-
-# Copy installed dependencies from builder
-COPY --from=builder /install /usr/local
-
-# Copy application code
+FROM builder AS build
 COPY . .
+# Optional: build commands like asset compilation
+# RUN python build_assets.py
 
-# Expose port (change if needed)
+# ======================
+# 4. Runtime Stage
+# ======================
+FROM python:3.12-slim AS runtime
+WORKDIR /app
+COPY --from=builder /install /usr/local
+COPY --from=build /app /app
 EXPOSE 8000
-
-# Default command (you can replace with uvicorn/flask/etc.)
 CMD ["python", "app.py"]
