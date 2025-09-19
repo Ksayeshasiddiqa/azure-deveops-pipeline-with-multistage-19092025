@@ -1,7 +1,4 @@
-# Docker
-# Build a Docker image
-# https://docs.microsoft.com/azure/devops/pipelines/languages/docker
-
+# Trigger on main branch
 trigger:
 - main
 
@@ -9,23 +6,49 @@ resources:
 - repo: self
 
 variables:
-  tag: '$(Build.BuildId)'
+  tag: '$(Build.BuildId)'  
+  dockerRegistryServiceConnection: 'azurecontainerregistrydocker'   # ACR service connection name
+  acrLoginServer: 'ksalinuxacr.azurecr.io'                          # ACR login server
+  imageRepository: 'ksayeshasiddiqaazuredeveopspipelinewithgithub' # Image name in ACR
+  dockerfilePath: '$(Build.SourcesDirectory)/Dockerfile'            # Path to Dockerfile
 
 stages:
-- stage: Build
-  displayName: Build image
+- stage: BuildAndPush
+  displayName: Build and Push Docker Image
   jobs:
   - job: Build
-    displayName: Build
+    displayName: Build on Linux Agent
     pool:
-      name: 'agent_ayesha'                # your agent pool name
+      name: 'agent_ayesha'                             # your agent pool
       demands:
-        - agent.name -equals agent_ayesha_linux   # ensure it runs only on this agent
+        - agent.name -equals agent_ayesha_linux       # run only on this agent
     steps:
+    # Checkout code
+    - checkout: self
+      persistCredentials: true
+
+    # Debug: list repo contents
+    - script: |
+        echo "Listing source files..."
+        ls -R $(Build.SourcesDirectory)
+      displayName: "Debug: List repo contents"
+
+    # Docker Hub login (to pull base images)
     - task: Docker@2
-      displayName: Build an image
+      displayName: Docker Hub Login
       inputs:
-        command: build
-        dockerfile: '**/Dockerfile'
+        command: login
+        containerRegistry: 'docker'   # Replace with your Docker Hub service connection
+
+    # Build & push multi-stage Docker image to ACR
+    - task: Docker@2
+      displayName: Build and Push Docker Image to ACR
+      inputs:
+        command: buildAndPush
+        containerRegistry: $(dockerRegistryServiceConnection)
+        repository: $(imageRepository)
+        dockerfile: $(dockerfilePath)
+        buildContext: $(Build.SourcesDirectory)
         tags: |
           $(tag)
+          latest
